@@ -8,15 +8,13 @@ import re
 import time
 import numpy as np
 import pandas as pd
+from itertools import combinations
 import nltk
 nltk.download("vader_lexicon")
 from nltk.sentiment import SentimentIntensityAnalyzer
 import scipy.cluster.hierarchy as sch
 import plotly.express as px
 from plotly.offline import plot
-
-FIG_SIZE = (30, 30)  # size of the plots
-FONT_SIZE = 16  # font size of text in plots
 
 if os.name == "nt":
     path_sep = "\\"
@@ -46,6 +44,7 @@ def prepare(df, name="Data Preparation", path=None, plots=True):
     if plots:
         print("Plotting:")
         start = time.time()
+        data.separate()
         data.correlations()
         data.scatter_plots()
         data.bar_plots()
@@ -182,178 +181,108 @@ class Prepare:
         print("> Shuffling The Data")
         self.df = self.df.sample(frac=1, random_state=0).reset_index(drop=True)
 
+    def separate(self):
+        self.numbers = self.df.drop(columns=["product_name", "category"]).columns.tolist()
+        self.strings = ["product_name", "category"]
+        
     def correlations(self):
         if self.plots:
             print("> Plotting Correlations")
             self.correlation_plot(
-                df=self.df.drop(columns=["product_name", "category"]), 
-                max_variables=None,
+                df=self.df[self.numbers], 
                 title="Correlation Heatmap",
                 font_size=16,
             )
 
     def scatter_plots(self):
         if self.plots:
-            print("> Actual Price vs. Discount Percentage")
-            self.scatter_plot(
-                df=self.df,
-                x="actual_price",
-                y="discount_percentage",
-                color=None,
-                title="Actual Price vs. Discount Percentage",
-                font_size=16,
-            )
+            pairs = list(combinations(self.numbers, 2))
+            for pair in pairs:
+                print(f"> {pair[0]} vs. {pair[1]}")
+                self.scatter_plot(
+                    df=self.df,
+                    x=pair[0],
+                    y=pair[1],
+                    color=None,
+                    title=f"{pair[0]} vs. {pair[1]}",
+                    font_size=16,
+                )
 
-            print("> Actual Price vs. Rating")
-            self.scatter_plot(
-                df=self.df,
-                x="actual_price",
-                y="rating",
-                color=None,
-                title="Actual Price vs. Rating",
-                font_size=16,
-            )
-
-            print("> Actual Price vs. Rating Count")
-            self.scatter_plot(
-                df=self.df,
-                x="actual_price",
-                y="rating_count",
-                color=None,
-                title="Actual Price vs. Rating Count",
-                font_size=16,
-            )
-
-            print("> Actual Price vs. About Product Positivity")
-            self.scatter_plot(
-                df=self.df,
-                x="actual_price",
-                y="about_product_positivity",
-                color=None,
-                title="Actual Price vs. About Product Positivity",
-                font_size=16,
-            )
-
-            print("> Actual Price vs. Review Title Positivity")
-            self.scatter_plot(
-                df=self.df,
-                x="actual_price",
-                y="review_title_positivity",
-                color=None,
-                title="Actual Price vs. Review Title Positivity",
-                font_size=16,
-            )
-
-            print("> Actual Price vs. Review Content Positivity")
-            self.scatter_plot(
-                df=self.df,
-                x="actual_price",
-                y="review_content_positivity",
-                color=None,
-                title="Actual Price vs. Review Content Positivity",
-                font_size=16,
-            )
-    
+    def histograms(self):
+        if self.plots:
+            for col in self.numbers:
+                print(f"> Plotting {col}")
+                self.histogram(
+                    df=self.df,
+                    x=col,
+                    bins=20,
+                    title=col,
+                    font_size=16,
+                )
+                
     def bar_plots(self):
         if self.plots:
-            print("> Plotting Product Name")
-            proportion = self.df["product_name"].value_counts(normalize=True).reset_index()
-            proportion.columns = ["Label", "Proportion"]
-            proportion = proportion.sort_values(by="Proportion", ascending=False).reset_index(drop=True)
-
-            self.bar_plot(
-                df=proportion,
-                x="Proportion",
-                y="Label",
-                title="Product Name",
-                font_size=16,
-            )
-
-            print("> Plotting Category")
-            proportion = self.df["category"].value_counts(normalize=True).reset_index()
-            proportion.columns = ["Label", "Proportion"]
-            proportion = proportion.sort_values(by="Proportion", ascending=False).reset_index(drop=True)
-
-            self.bar_plot(
-                df=proportion,
-                x="Proportion",
-                y="Label",
-                title="Category",
-                font_size=16,
-            )
+            for col in self.strings:
+                print(f"> Plotting {col}")
+                proportion = self.df[col].value_counts(normalize=True).reset_index()
+                proportion.columns = ["Label", "Proportion"]
+                proportion = proportion.sort_values(by="Proportion", ascending=False).reset_index(drop=True)
+                self.bar_plot(
+                    df=proportion,
+                    x="Proportion",
+                    y="Label",
+                    title=col,
+                    font_size=16,
+                )
 
     def pairwise_bar_plots(self):
         if self.plots:
-            print("> Product Name vs. Category")
-            data = self.df[["product_name", "category"]].copy()
-            data["product_name, category"] = data["product_name"] + ", " + data["category"]
-            proportion = data["product_name, category"].value_counts(normalize=True).reset_index()
-            proportion.columns = ["Label", "Proportion"]
-            proportion = proportion.sort_values(by="Proportion", ascending=False).reset_index(drop=True)
+            pairs = list(combinations(self.strings, 2))
+            for pair in pairs:
+                print(f"> {pair[0]} vs. {pair[1]}")
+                data = pd.DataFrame()
+                data[f"{pair[0]}, {pair[1]}"] = self.df[pair[0]].astype(str) + ", " + self.df[pair[1]].astype(str)
+                proportion = data[f"{pair[0]}, {pair[1]}"].value_counts(normalize=True).reset_index()
+                proportion.columns = [f"{pair[0]}, {pair[1]}", "Proportion"]
+                proportion = proportion.sort_values(by="Proportion", ascending=False).reset_index(drop=True)
+                self.bar_plot(
+                    df=proportion,
+                    x="Proportion",
+                    y=f"{pair[0]}, {pair[1]}",
+                    title=f"{pair[0]} vs. {pair[1]}",
+                    font_size=16,
+                )
 
-            self.bar_plot(
-                df=proportion,
-                x="Proportion",
-                y="Label",
-                title="Product Name vs. Category",
-                font_size=16,
-            )
-    
     def boxplots(self):
         if self.plots:
-            print("> Actual Price vs. Product Name")
-            self.box_plot(
-                df=self.df, 
-                x="actual_price", 
-                y="product_name",
-                title="Actual Price vs. Product Name",
-                font_size=16,
-            )
+            pairs = list()
+            for number in self.numbers:
+                for string in self.strings:
+                    pairs.append((number, string))
+            
+            for pair in pairs:
+                print(f"> {pair[0]} vs. {pair[1]}")
+                # sort the data by the group average
+                data = self.df.copy()
+                df = data.groupby(pair[1]).agg({pair[0]: "mean"}).reset_index()
+                df = df.sort_values(by=pair[0]).reset_index(drop=True).reset_index()
+                df = df.drop(columns=pair[0])
+                data = data.merge(right=df, how="left", on=pair[1])
+                data = data.sort_values(by="index").reset_index(drop=True)
+                self.box_plot(
+                    df=data, 
+                    x=pair[0], 
+                    y=pair[1],
+                    title=f"{pair[0]} vs. {pair[1]}",
+                    font_size=16,
+                )
 
-            print("> Actual Price vs. Category")
-            self.box_plot(
-                df=self.df, 
-                x="actual_price", 
-                y="category",
-                title="Actual Price vs. Category",
-                font_size=16,
-            )
-
-    def correlation_plot(self, df, max_variables=None, title="Correlation Heatmap", font_size=None):
+    def correlation_plot(self, df, title="Correlation Heatmap", font_size=None):
         df = df.copy()
-        self.correlation = df.corr()
-
-        # reduce the number of variables
-        if max_variables is not None and df.shape[1] > max_variables:
-            # flatten the correlation matrix into pairings
-            correlations = self.correlation.copy()
-            correlations = correlations.stack().reset_index()
-            correlations.columns = ["Variable 1", "Variable 2", "Correlation"]
-
-            # remove duplicate pairings
-            mask_duplicates = (correlations[["Variable 1", "Variable 2"]].apply(frozenset, axis=1).duplicated()) | (correlations["Variable 1"]==correlations["Variable 2"]) 
-            correlations = correlations[~mask_duplicates]
-
-            # only keep correlations with a magnitude of at least 0.8
-            correlations["Magnitude"] = correlations["Correlation"].abs()
-            correlations = correlations.sort_values(by="Magnitude", ascending=False).reset_index(drop=True)
-            correlations = correlations.loc[correlations["Magnitude"] >= 0.8]
-
-            # limit the number of pairings to plot
-            correlations = correlations.head(max_variables)
-
-            # choose which variables to keep
-            variables = list()
-            for i in range(correlations.shape[0]):
-                variables.append(correlations["Variable 1"][i])
-                variables.append(correlations["Variable 2"][i])
-            variables = pd.unique(variables)[:max_variables]
-
-            df = df[variables]
-            self.correlation = df.corr()
+        correlation = df.corr()
 
         # group columns together with hierarchical clustering
-        X = self.correlation.values
+        X = correlation.values
         d = sch.distance.pdist(X)
         L = sch.linkage(d, method="ward")
         ind = sch.fcluster(L, 0.5*d.max(), "distance")
@@ -361,29 +290,29 @@ class Prepare:
         df = df.reindex(columns, axis=1)
         
         # compute the correlation matrix for the received dataframe
-        self.correlation = df.corr()
+        correlation = df.corr()
 
         # plot the correlation matrix
-        fig = px.imshow(self.correlation, title=title)
-        fig.update_layout(font=dict(size=font_size))
+        fig = px.imshow(correlation, title=title, range_color=(-1, 1))
+        fig.update_layout(font=dict(size=font_size), title_x=0.5)
         title = re.sub("[^A-Za-z0-9]+", " ", title)
         plot(fig, filename=f"{self.path}{path_sep}{self.name}{path_sep}{title}.html")
 
     def scatter_plot(self, df, x, y, color=None, title="Scatter Plot", font_size=None):
         fig = px.scatter(df, x=x, y=y, color=color, title=title)
-        fig.update_layout(font=dict(size=font_size))
+        fig.update_layout(font=dict(size=font_size), title_x=0.5)
         title = re.sub("[^A-Za-z0-9]+", " ", title)
         plot(fig, filename=f"{self.path}{path_sep}{self.name}{path_sep}{title}.html")
 
     def bar_plot(self, df, x, y, color=None, title="Bar Plot", font_size=None):
         fig = px.bar(df, x=x, y=y, color=color, title=title)
-        fig.update_layout(font=dict(size=font_size))
+        fig.update_layout(font=dict(size=font_size), title_x=0.5)
         title = re.sub("[^A-Za-z0-9]+", " ", title)
         plot(fig, filename=f"{self.path}{path_sep}{self.name}{path_sep}{title}.html")
 
     def box_plot(self, df, x, y, color=None, title="Box Plot", font_size=None):
         fig = px.box(df, x=x, y=y, color=color, title=title)
-        fig.update_layout(font=dict(size=font_size))
+        fig.update_layout(font=dict(size=font_size), title_x=0.5)
         title = re.sub("[^A-Za-z0-9]+", " ", title)
         plot(fig, filename=f"{self.path}{path_sep}{self.name}{path_sep}{title}.html")
 
